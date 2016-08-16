@@ -36,6 +36,8 @@ LOCAL_CPPFLAGS += -Wno-gnu-zero-variadic-macro-arguments
 # Don't warn about struct padding
 LOCAL_CPPFLAGS += -Wno-padded
 
+
+
 LOCAL_SRC_FILES := \
 	IGraphicBufferConsumer.cpp \
 	IConsumerListener.cpp \
@@ -89,6 +91,10 @@ ifeq ($(TARGET_BOARD_PLATFORM), tegra)
 endif
 ifeq ($(TARGET_BOARD_PLATFORM), tegra3)
 	LOCAL_CFLAGS += -DDONT_USE_FENCE_SYNC
+endif
+
+ifeq ($(strip $(BOARD_USE_AFBC_LAYER)),true)
+LOCAL_CFLAGS += -DUSE_AFBC_LAYER
 endif
 
 include $(BUILD_SHARED_LIBRARY)

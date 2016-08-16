@@ -784,9 +784,16 @@ int Surface::setUsage(uint32_t reqUsage)
     else
     {    
         mReqUsage = reqUsage;
+    }  
+#ifdef USE_AFBC_LAYER
+#define MAGIC_USAGE_TO_USE_AFBC_LAYER     (0x88)
+    if(mReqUsage & 0x08000000)
+    {
+        mReqUsage |= MAGIC_USAGE_TO_USE_AFBC_LAYER;
+        ALOGD("rk_debug @FBR force enable AFBC");
     }    
-    ALOGD("Surface::final mReqUsage=%x",mReqUsage);
-
+    //ALOGD("Surface::final mReqUsage=%x",mReqUsage);
+#endif
     return OK;
 }
 
