@@ -3163,6 +3163,35 @@ SurfaceFlinger::getLayerSortedByZForHwcDisplay(int id) {
     return getDisplayDevice(dpy)->getVisibleLayersSortedByZ();
 }
 
+#ifdef OPEN_FBDC
+bool SurfaceFlinger::hasLayerFromLayerSortedByZ(const char* layer) {
+    // Note: mStateLock is held here
+    wp<IBinder> dpy;
+
+    if(!layer)
+    {
+        ALOGE("%s: layer is null", __FUNCTION__);
+        return false;
+    }
+
+    dpy = getBuiltInDisplay(DisplayDevice::DISPLAY_PRIMARY);
+    const Vector< sp<Layer> >& visibleLayersSortedByZ =getDisplayDevice(dpy)->getVisibleLayersSortedByZ();
+#if 0
+    for (size_t j=0 ; j< visibleLayersSortedByZ.size() ; j++) {
+        const sp<Layer>& disp_layer(visibleLayersSortedByZ[j]);
+        ALOGD("disp layer[%d]=%s",j,disp_layer->getName().string());
+    }
+#endif
+    for (size_t j=0 ; j< visibleLayersSortedByZ.size() ; j++) {
+        const sp<Layer>& disp_layer(visibleLayersSortedByZ[j]);
+        if(!strcmp(disp_layer->getName().string(),layer))
+            return true;
+    }
+
+    return false;
+}
+#endif
+
 bool SurfaceFlinger::ReleaseOldBuffer(void)
 {
     if (mUseLcdcComposer) {

@@ -54,7 +54,20 @@
 
 #define DEBUG_RESIZE    0
 
+#ifdef OPEN_FBDC
+#define DEBUG_FBDC          (0)
+#define MAX_FBDC_LAYER      (2)
+#define EXCLUDE_DIM         (1)
+#endif
+
 namespace android {
+
+#ifdef OPEN_FBDC
+/** width and height of primary_display_device. */
+static uint32_t g_hw_w = 0, g_hw_h = 0;
+static int g_fbdc_cnt = 0;
+static Vector<const char*> vFbdcLayers;
+#endif
 
 // ---------------------------------------------------------------------------
 
@@ -77,6 +90,9 @@ Layer::Layer(SurfaceFlinger* flinger, const sp<Client>& client,
         mCurrentOpacity(true),
         mRefreshPending(false),
         mFrameLatencyNeeded(false),
+#ifdef OPEN_FBDC
+        mFbdc(false),
+#endif
         mFiltering(false),
         mNeedsFiltering(false),
         mMesh(Mesh::TRIANGLE_FAN, 4, 2, 2),
@@ -127,6 +143,17 @@ Layer::Layer(SurfaceFlinger* flinger, const sp<Client>& client,
             flinger->getHwComposer().getRefreshPeriod(HWC_DISPLAY_PRIMARY);
     mFrameTracker.setDisplayRefreshPeriod(displayPeriod);
 	mLastRealtransform = 0;
+
+#ifdef OPEN_FBDC
+    wp<IBinder> dpy;
+    if(!g_hw_w && !g_hw_h)
+    {
+        dpy = mFlinger->getBuiltInDisplay(DisplayDevice::DISPLAY_PRIMARY);
+        sp<const DisplayDevice> hw(mFlinger->getDisplayDevice(dpy));
+        g_hw_w = hw->getWidth();
+        g_hw_h= hw->getHeight();
+    }
+#endif
 }
 
 void Layer::onFirstRef() {
@@ -169,6 +196,21 @@ Layer::~Layer() {
     }
     mFlinger->deleteTextureAsync(mTextureName);
     mFrameTracker.logAndResetStats(mName);
+#ifdef OPEN_FBDC
+    if(mFbdc)
+    {
+        for (size_t i = 0; i < vFbdcLayers.size(); ++i) {
+            if(!strcmp(vFbdcLayers[i],mName.string()))
+            {
+                mFbdc = false;
+                g_fbdc_cnt--;
+                ALOGD_IF(DEBUG_FBDC,
+                        "%s: remove fbdc layer name=%s", __FUNCTION__, vFbdcLayers[i]);
+                vFbdcLayers.removeAt(i);
+            }
+        }
+    }
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -269,11 +311,49 @@ const String8& Layer::getName() const {
     return mName;
 }
 
+#ifdef OPEN_FBDC
+void Layer::removeDisplayFbdcLayer() {
+#if 0
+    for (size_t i = 0; i < vFbdcLayers.size(); ++i)
+    {
+        ALOGD("%s: fbdc name[%d]=%s",__FUNCTION__,i,vFbdcLayers[i]);
+    }
+#endif
+
+    for (size_t i = 0; i < vFbdcLayers.size(); ++i) {
+        if(mFlinger->hasLayerFromLayerSortedByZ(vFbdcLayers[i]))
+        {
+            g_fbdc_cnt--;
+            ALOGD_IF(DEBUG_FBDC,
+                    "%s: name=%s",__FUNCTION__,vFbdcLayers[i]);
+            vFbdcLayers.removeAt(i);
+            removeDisplayFbdcLayer();
+        }
+    }
+}
+
+bool Layer::hasLayerInFbdcLayers(const char* pcLayer) {
+    if(!pcLayer)
+    {
+        ALOGE("%s:layer is null",pcLayer);
+        return false;
+    }
+
+    for (size_t i = 0; i < vFbdcLayers.size(); ++i) {
+        if(!strcmp(vFbdcLayers[i],pcLayer))
+            return true;
+    }
+
+    return false;
+}
+#endif
+
 status_t Layer::setBuffers( uint32_t w, uint32_t h,
                             PixelFormat format, uint32_t flags)
 {
     uint32_t const maxSurfaceDims = min(
             mFlinger->getMaxTextureSize(), mFlinger->getMaxViewportDims());
+    uint32_t usage = getEffectiveUsage(0);
 
     // never allow a surface larger than what our underlying GL implementation
     // can handle.
@@ -290,7 +370,35 @@ status_t Layer::setBuffers( uint32_t w, uint32_t h,
 
     mSurfaceFlingerConsumer->setDefaultBufferSize(w, h);
     mSurfaceFlingerConsumer->setDefaultBufferFormat(format);
-    mSurfaceFlingerConsumer->setConsumerUsageBits(getEffectiveUsage(0));
+
+#ifdef OPEN_FBDC
+    ALOGD_IF(DEBUG_FBDC,
+            "%s:layer name=%s,w=%d,h=%d", __FUNCTION__, mName.string(), w, h);
+
+    removeDisplayFbdcLayer();
+
+    if(
+#if EXCLUDE_DIM
+    strcmp(mName.string(),"DimLayer") &&
+#endif
+        g_fbdc_cnt < MAX_FBDC_LAYER && !mFlinger->hasLayerFromLayerSortedByZ(mName.string()) &&
+        !hasLayerInFbdcLayers(mName.string()))
+    {
+        if(/*strstr(mName.string(),"com.android.launcher3/com.android.launcher3.Launcher") ||*/
+            ((g_fbdc_cnt==0) && (w >= 0.8 * g_hw_w) && (h >= 0.8 * g_hw_h)) ||
+            ((g_fbdc_cnt==1) && (w >= g_hw_w) && (h >= g_hw_h)))
+        {
+            usage |= 0x88;
+            g_fbdc_cnt++;
+            mFbdc = true;
+            vFbdcLayers.push_back(mName.string());
+            ALOGD_IF(DEBUG_FBDC,
+                    "%s:g_fbdc_cnt=%d,layer=%s [%d,%d] set to fbdc", __FUNCTION__,
+                    g_fbdc_cnt,mName.string(), w, h);
+        }
+    }
+#endif
+    mSurfaceFlingerConsumer->setConsumerUsageBits(usage);
 
     return NO_ERROR;
 }
@@ -1390,6 +1498,32 @@ bool Layer::setSize(uint32_t w, uint32_t h) {
     mCurrentState.requested.w = w;
     mCurrentState.requested.h = h;
     setTransactionFlags(eTransactionNeeded);
+
+#ifdef OPEN_FBDC
+    uint32_t usage = getEffectiveUsage(0);
+
+    if(
+#if EXCLUDE_DIM
+    strcmp(mName.string(),"DimLayer") &&
+#endif
+        g_fbdc_cnt < MAX_FBDC_LAYER && !mFlinger->hasLayerFromLayerSortedByZ(mName.string()) &&
+        !hasLayerInFbdcLayers(mName.string()))
+    {
+        if(((g_fbdc_cnt==0) && (w >= 0.8 * g_hw_w) && (h >= 0.8 * g_hw_h)) ||
+            ((g_fbdc_cnt==1) && (w >= g_hw_w) && (h >= g_hw_h)))
+        {
+            usage |= 0x88;
+            g_fbdc_cnt++;
+            mFbdc = true;
+            vFbdcLayers.push_back(mName.string());
+            ALOGD_IF(DEBUG_FBDC,
+                    "%s:g_fbdc_cnt=%d,layer=%s [%d,%d] set to fbdc",__FUNCTION__,g_fbdc_cnt,mName.string(),w,h);
+        }
+    }
+
+    mSurfaceFlingerConsumer->setConsumerUsageBits(usage);
+#endif
+
     return true;
 }
 bool Layer::setAlpha(uint8_t alpha) {
@@ -1794,7 +1928,8 @@ uint32_t Layer::getEffectiveUsage(uint32_t usage) const
     usage |= GraphicBuffer::USAGE_HW_COMPOSER;
 
 
-#ifdef USE_AFBC_LAYER
+// #ifdef USE_AFBC_LAYER
+#if 0
 #define MAGIC_USAGE_TO_USE_AFBC_LAYER     (0x88)
 #if 0
     char propValue[PROPERTY_VALUE_MAX];

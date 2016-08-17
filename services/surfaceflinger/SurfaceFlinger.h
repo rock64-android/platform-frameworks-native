@@ -142,6 +142,10 @@ public:
     // TODO: this should be made accessible only to HWComposer
     const Vector< sp<Layer> >& getLayerSortedByZForHwcDisplay(int id);
 
+#ifdef OPEN_FBDC
+    bool hasLayerFromLayerSortedByZ(const char* layer);
+#endif
+
     RenderEngine& getRenderEngine() const {
         return *mRenderEngine;
     }

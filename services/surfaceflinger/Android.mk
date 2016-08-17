@@ -142,6 +142,7 @@ endif
 
 ifeq ($(strip $(BOARD_USE_AFBC_LAYER)),true)
 LOCAL_CFLAGS += -DUSE_AFBC_LAYER
+LOCAL_CFLAGS += -DOPEN_FBDC
 endif
 
 LOCAL_CFLAGS += -fvisibility=hidden -Werror=format

@@ -130,6 +130,11 @@ public:
 
     virtual ~Layer();
 
+#ifdef OPEN_FBDC
+    void removeDisplayFbdcLayer();
+    bool hasLayerInFbdcLayers(const char* pcLayer);
+#endif
+
     // the this layer's size and format
     status_t setBuffers(uint32_t w, uint32_t h, PixelFormat format, uint32_t flags);
 
@@ -410,6 +415,10 @@ private:
     bool mCurrentOpacity;
     bool mRefreshPending;
     bool mFrameLatencyNeeded;
+#ifdef OPEN_FBDC
+    // The layer is fbdc.
+    mutable bool mFbdc;
+#endif
     // Whether filtering is forced on or not
     bool mFiltering;
     // Whether filtering is needed b/c of the drawingstate
