@@ -3164,6 +3164,9 @@ SurfaceFlinger::getLayerSortedByZForHwcDisplay(int id) {
 }
 
 #ifdef OPEN_FBDC
+/**
+ * 在 primary_display 上, 是否有名称为 'layer' 的 visible_layer.
+ */
 bool SurfaceFlinger::hasLayerFromLayerSortedByZ(const char* layer) {
     // Note: mStateLock is held here
     wp<IBinder> dpy;
@@ -3183,7 +3186,7 @@ bool SurfaceFlinger::hasLayerFromLayerSortedByZ(const char* layer) {
     }
 #endif
     for (size_t j=0 ; j< visibleLayersSortedByZ.size() ; j++) {
-        const sp<Layer>& disp_layer(visibleLayersSortedByZ[j]);
+        const sp<Layer>& disp_layer(visibleLayersSortedByZ[j]); // current_visible_layer
         if(!strcmp(disp_layer->getName().string(),layer))
             return true;
     }

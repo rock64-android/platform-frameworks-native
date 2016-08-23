@@ -55,7 +55,8 @@
 #define DEBUG_RESIZE    0
 
 #ifdef OPEN_FBDC
-#define DEBUG_FBDC          (0)
+#define DEBUG_FBDC          (1)
+/** max num of unvisible_fbdc_layers. */
 #define MAX_FBDC_LAYER      (2)
 #define EXCLUDE_DIM         (1)
 #endif
@@ -65,7 +66,9 @@ namespace android {
 #ifdef OPEN_FBDC
 /** width and height of primary_display_device. */
 static uint32_t g_hw_w = 0, g_hw_h = 0;
+/** counter_of_unvisible_fbdc_layers. */
 static int g_fbdc_cnt = 0;
+/** vector_of_names_of_unvisible_fbdc_layers. */
 static Vector<const char*> vFbdcLayers;
 #endif
 
@@ -200,7 +203,7 @@ Layer::~Layer() {
     if(mFbdc)
     {
         for (size_t i = 0; i < vFbdcLayers.size(); ++i) {
-            if(!strcmp(vFbdcLayers[i],mName.string()))
+            if(!strcmp(vFbdcLayers[i], mName.string()))
             {
                 mFbdc = false;
                 g_fbdc_cnt--;
@@ -312,6 +315,9 @@ const String8& Layer::getName() const {
 }
 
 #ifdef OPEN_FBDC
+/**
+ * remove all visible_layers from 'vFbdcLayers'.
+ */
 void Layer::removeDisplayFbdcLayer() {
 #if 0
     for (size_t i = 0; i < vFbdcLayers.size(); ++i)
@@ -327,11 +333,15 @@ void Layer::removeDisplayFbdcLayer() {
             ALOGD_IF(DEBUG_FBDC,
                     "%s: name=%s",__FUNCTION__,vFbdcLayers[i]);
             vFbdcLayers.removeAt(i);
-            removeDisplayFbdcLayer();
+
+            removeDisplayFbdcLayer(); // recurssion, because size of 'vFbdcLayers' changed.
         }
     }
 }
 
+/**
+ * return whether 'pcLayer' name of a unvisible_fbdc_layer?
+ */
 bool Layer::hasLayerInFbdcLayers(const char* pcLayer) {
     if(!pcLayer)
     {
@@ -381,12 +391,16 @@ status_t Layer::setBuffers( uint32_t w, uint32_t h,
 #if EXCLUDE_DIM
     strcmp(mName.string(),"DimLayer") &&
 #endif
-        g_fbdc_cnt < MAX_FBDC_LAYER && !mFlinger->hasLayerFromLayerSortedByZ(mName.string()) &&
-        !hasLayerInFbdcLayers(mName.string()))
+        g_fbdc_cnt < MAX_FBDC_LAYER // could have more fbdc_layer.
+        && !mFlinger->hasLayerFromLayerSortedByZ(mName.string()) // current layer is not a visible_layers.
+        && !hasLayerInFbdcLayers(mName.string())) // it is not in 'vFbdcLayers'.
     {
         if(/*strstr(mName.string(),"com.android.launcher3/com.android.launcher3.Launcher") ||*/
-            ((g_fbdc_cnt==0) && (w >= 0.8 * g_hw_w) && (h >= 0.8 * g_hw_h)) ||
-            ((g_fbdc_cnt==1) && (w >= g_hw_w) && (h >= g_hw_h)))
+            ((g_fbdc_cnt==0)
+                && (w >= 0.8 * g_hw_w)
+                && (h >= 0.8 * g_hw_h))
+            || ((g_fbdc_cnt==1)
+                && (w >= g_hw_w) && (h >= g_hw_h)))
         {
             usage |= 0x88;
             g_fbdc_cnt++;
@@ -1506,11 +1520,16 @@ bool Layer::setSize(uint32_t w, uint32_t h) {
 #if EXCLUDE_DIM
     strcmp(mName.string(),"DimLayer") &&
 #endif
-        g_fbdc_cnt < MAX_FBDC_LAYER && !mFlinger->hasLayerFromLayerSortedByZ(mName.string()) &&
-        !hasLayerInFbdcLayers(mName.string()))
+        g_fbdc_cnt < MAX_FBDC_LAYER 
+        && !mFlinger->hasLayerFromLayerSortedByZ(mName.string()) 
+        && !hasLayerInFbdcLayers(mName.string()))
     {
-        if(((g_fbdc_cnt==0) && (w >= 0.8 * g_hw_w) && (h >= 0.8 * g_hw_h)) ||
-            ((g_fbdc_cnt==1) && (w >= g_hw_w) && (h >= g_hw_h)))
+        if(((g_fbdc_cnt==0) 
+                && (w >= 0.8 * g_hw_w) 
+                && (h >= 0.8 * g_hw_h)) 
+            || ((g_fbdc_cnt==1) 
+                && (w >= g_hw_w) 
+                && (h >= g_hw_h)))
         {
             usage |= 0x88;
             g_fbdc_cnt++;
