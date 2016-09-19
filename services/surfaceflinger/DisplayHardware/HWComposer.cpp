@@ -1090,6 +1090,11 @@ public:
     virtual int32_t getDisplayStereo() const {
         return getLayer()->displayStereo;
     }
+
+    virtual void setUseFbdc(bool useFbdc) {
+        getLayer()->useFbdc =  useFbdc;
+    }
+
     virtual void setDefaultState() {
         hwc_layer_1_t* const l = getLayer();
         l->compositionType = HWC_FRAMEBUFFER;
@@ -1335,11 +1340,11 @@ void HWComposer::dump(String8& result) const {
                         disp.list->numHwLayers, disp.list->flags);
 
                 result.append(
-                        "    type   |  handle  | hint | flag | tr | blnd |   format    |     source crop (l,t,r,b)      |          frame         | name \n"
-                        "-----------+----------+------+------+----+------+-------------+--------------------------------+------------------------+------\n");
-                //      " _________ | ________ | ____ | ____ | __ | ____ | ___________ |_____._,_____._,_____._,_____._ |_____,_____,_____,_____ | ___...
+                        "    type   |      handle      | hint | flag | tr |  blnd  |   format    | may fbdc |     source crop (l,t,r,b)      |          frame         | name \n"
+                        "-----------+------------------+------+------+----+--------+-------------+----------+--------------------------------+------------------------+------\n");
+
                 for (size_t i=0 ; i<disp.list->numHwLayers ; i++) {
-                    const hwc_layer_1_t&l = disp.list->hwLayers[i];
+                    const hwc_layer_1_t& l = disp.list->hwLayers[i];
                     int32_t format = -1;
                     String8 name("unknown");
 
@@ -1378,21 +1383,12 @@ void HWComposer::dump(String8& result) const {
 
                     String8 formatStr = getFormatStr(format);
                     if (hwcHasApiVersion(mHwc, HWC_DEVICE_API_VERSION_1_3)) {
-#if 0
-                        result.appendFormat(
-                                " %9s | %08" PRIxPTR " | %04x | %04x | %02x | %04x | %-11s |%7.1f,%7.1f,%7.1f,%7.1f |%5d,%5d,%5d,%5d | %s\n",
-                                        compositionTypeName[type],
-                                        intptr_t(l.handle), l.hints, l.flags, l.transform, l.blending, formatStr.string(),
-                                        l.sourceCropf.left, l.sourceCropf.top, l.sourceCropf.right, l.sourceCropf.bottom,
-                                        l.displayFrame.left, l.displayFrame.top, l.displayFrame.right, l.displayFrame.bottom,
-                                        name.string());
-#else
                         size_t indexOfFbTargetLayer = disp.list->numHwLayers - 1;
                         if ( i != indexOfFbTargetLayer )
                         {
                             result.appendFormat(
-                            // tyep,  | handle         | hint | flag | tr   | bland| format| srouce crop    | frame          | name
-                                " %9s | %08" PRIxPTR " | %04x | %04x | %02x | %04x | %-11s |%7d,%7d,%7d,%7d |%5d,%5d,%5d,%5d | %s\n",
+                            // tyep,  |        handle   | hint | flag | tr   | bland| format| fbdc | srouce crop    | frame          | name
+                                " %9s | %016" PRIxPTR " | %04x | %04x | %02x | %06x | %-11s | %8d |%7d,%7d,%7d,%7d |%5d,%5d,%5d,%5d | %s\n",
                                         compositionTypeName[type],
                                         intptr_t(l.handle),
                                         l.hints,
@@ -1400,6 +1396,7 @@ void HWComposer::dump(String8& result) const {
                                         l.transform,
                                         l.blending,
                                         formatStr.string(),
+                                        l.useFbdc,
                                         l.sourceCrop.left, l.sourceCrop.top, l.sourceCrop.right, l.sourceCrop.bottom, 
                                             // "sourceCrop" : 虽然 hwc 有版本 1.3,
                                             // 但是 sf_client_layer 实际使用的 sourceCrop, 而不是 sourceCropf.
@@ -1407,21 +1404,27 @@ void HWComposer::dump(String8& result) const {
                                             // layer_to_compose(sf_client_layer) 的 sourceCrop 在 setCrop() 中赋值.
                                         l.displayFrame.left, l.displayFrame.top, l.displayFrame.right, l.displayFrame.bottom,
                                         name.string());
+
                         }
                         else    /* 否则, 即当前 layer "是" fb_target_layer, 则... */
                         {
                             result.appendFormat(
-                                " %9s | %08" PRIxPTR " | %04x | %04x | %02x | %04x | %-11s |%7.1f,%7.1f,%7.1f,%7.1f |%5d,%5d,%5d,%5d | %s\n",
+                            // tyep,  |         handle | hint | flag | tr   | bland| format| fbdc| srouce crop    | frame          | name
+                                " %9s | %016" PRIxPTR " | %04x | %04x | %02x | %06x | %-11s | %8d |%7.1f,%7.1f,%7.1f,%7.1f |%5d,%5d,%5d,%5d | %s\n",
                                         compositionTypeName[type],
                                         intptr_t(l.handle), l.hints, l.flags, l.transform, l.blending, formatStr.string(),
+#if OPEN_FBDC
+                                        1,  // 有 fbdc 的平台, fb_target_layer 默认使能 fbdc.
+#else
+                                        l.useFbdc,
+#endif
                                         l.sourceCropf.left, l.sourceCropf.top, l.sourceCropf.right, l.sourceCropf.bottom,
                                         l.displayFrame.left, l.displayFrame.top, l.displayFrame.right, l.displayFrame.bottom,
                                         name.string());
                         }
-#endif
-                    } else {
+                    } else {    // if (hwcHasApiVersion(mHwc, HWC_DEVICE_API_VERSION_1_3)) {
                         result.appendFormat(
-                                " %9s | %08" PRIxPTR " | %04x | %04x | %02x | %04x | %-11s |%7d,%7d,%7d,%7d |%5d,%5d,%5d,%5d | %s\n",
+                                " %9s | %016" PRIxPTR " | %04x | %04x | %02x | %06x | %-11s |%7d,%7d,%7d,%7d |%5d,%5d,%5d,%5d | %s\n",
                                         compositionTypeName[type],
                                         intptr_t(l.handle), l.hints, l.flags, l.transform, l.blending, formatStr.string(),
                                         l.sourceCrop.left, l.sourceCrop.top, l.sourceCrop.right, l.sourceCrop.bottom,

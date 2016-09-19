@@ -48,6 +48,10 @@
 #include "RenderEngine/Mesh.h"
 #include "RenderEngine/Texture.h"
 
+#define LAYER_D(fmt, args...)   D("[%s] : " fmt, mName.string(), ## args)
+
+/*---------------------------------------------------------------------------*/
+
 namespace android {
 
 // ---------------------------------------------------------------------------
@@ -129,11 +133,6 @@ public:
             const String8& name, uint32_t w, uint32_t h, uint32_t flags);
 
     virtual ~Layer();
-
-#ifdef OPEN_FBDC
-    void removeDisplayFbdcLayer();
-    bool hasLayerInFbdcLayers(const char* pcLayer);
-#endif
 
     // the this layer's size and format
     status_t setBuffers(uint32_t w, uint32_t h, PixelFormat format, uint32_t flags);
@@ -359,8 +358,18 @@ protected:
         LayerCleaner(const sp<SurfaceFlinger>& flinger, const sp<Layer>& layer);
     };
 
-
 private:
+#ifdef OPEN_FBDC
+    void removeVisibleFbdcLayers();
+    bool isUnvisibleFbdcLayer(const char* pcLayer);
+    bool wouldUseFbdc(uint32_t w, uint32_t h, uint32_t usage);
+    static void dumpNameOfUnVisibleFbdcLayers();
+    bool isInBlackListOfFbdc();
+#endif
+#ifdef USE_AFBC_LAYER
+    static bool couldBeAfbcLayerByFormatAndUsage(PixelFormat format, uint32_t usage);
+#endif
+
     // Interface implementation for SurfaceFlingerConsumer::ContentsChangedListener
     virtual void onFrameAvailable(const BufferItem& item) override;
     virtual void onFrameReplaced(const BufferItem& item) override;
@@ -415,10 +424,19 @@ private:
     bool mCurrentOpacity;
     bool mRefreshPending;
     bool mFrameLatencyNeeded;
-#ifdef OPEN_FBDC
-    // The layer is fbdc.
+
+    /**
+     * 标识是否对当前 layer "预期" 使用某种 fbdc 格式.
+     * 但是 buffer 是否使用 fbdc 格式, 最终在 gralloc 的 alloc 实现中确定.
+     * .DP : FBDC, fbdc : 广义的 fbdc 指的是 "framebuffer 数据压缩".
+     * .DP : AFBC, afbc : ARM Frame Buffer Compression, 显然是一种 fbdc.
+     *
+     * 因为 producer 可能通过其他接口改变 usage 和 format 的设置,
+     * 所以即便本成员是 true, 最终的 buffer 也未必使用 fbdc 格式.
+     * 一个例子是 rk_video_decoder 的输出 buffer.
+     */
     mutable bool mFbdc;
-#endif
+
     // Whether filtering is forced on or not
     bool mFiltering;
     // Whether filtering is needed b/c of the drawingstate

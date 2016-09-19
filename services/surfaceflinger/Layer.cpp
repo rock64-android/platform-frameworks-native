@@ -17,7 +17,7 @@
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
 // #define LOG_TAG "sf"
-#define ENABLE_DEBUG_LOG
+// #define ENABLE_DEBUG_LOG
 #include <log/custom_log.h>
 
 #include <stdlib.h>
@@ -58,18 +58,24 @@
 #define DEBUG_FBDC          (1)
 /** max num of unvisible_fbdc_layers. */
 #define MAX_FBDC_LAYER      (2)
+/** 若定义 则 "不对" dim_layer . */
 #define EXCLUDE_DIM         (1)
 #endif
 
 namespace android {
 
 #ifdef OPEN_FBDC
-/** width and height of primary_display_device. */
-static uint32_t g_hw_w = 0, g_hw_h = 0;
-/** counter_of_unvisible_fbdc_layers. */
-static int g_fbdc_cnt = 0;
-/** vector_of_names_of_unvisible_fbdc_layers. */
-static Vector<const char*> vFbdcLayers;
+/**
+ * width and height of primary_display_device 中较长和较短方的具体大小.
+ */
+static uint32_t g_longer_dimension_in_disp = 0;
+static uint32_t g_shorter_dimension_in_disp = 0;
+/**
+ * vector_of_names_of_unvisible_fbdc_layers.
+ *
+ * .DP : unvisible_fbdc_layer, UFL, ufl
+ */
+static Vector<String8> vFbdcLayers;
 #endif
 
 // ---------------------------------------------------------------------------
@@ -93,9 +99,7 @@ Layer::Layer(SurfaceFlinger* flinger, const sp<Client>& client,
         mCurrentOpacity(true),
         mRefreshPending(false),
         mFrameLatencyNeeded(false),
-#ifdef OPEN_FBDC
         mFbdc(false),
-#endif
         mFiltering(false),
         mNeedsFiltering(false),
         mMesh(Mesh::TRIANGLE_FAN, 4, 2, 2),
@@ -149,12 +153,27 @@ Layer::Layer(SurfaceFlinger* flinger, const sp<Client>& client,
 
 #ifdef OPEN_FBDC
     wp<IBinder> dpy;
-    if(!g_hw_w && !g_hw_h)
+    if ( 0 == g_longer_dimension_in_disp && 0 == g_shorter_dimension_in_disp )
     {
+        uint32_t w = 0;
+        uint32_t h = 0;
+
         dpy = mFlinger->getBuiltInDisplay(DisplayDevice::DISPLAY_PRIMARY);
         sp<const DisplayDevice> hw(mFlinger->getDisplayDevice(dpy));
-        g_hw_w = hw->getWidth();
-        g_hw_h= hw->getHeight();
+
+        w = hw->getWidth();
+        h = hw->getHeight();
+
+        if ( w >= h )
+        {
+            g_longer_dimension_in_disp = w;
+            g_shorter_dimension_in_disp = h;
+        }
+        else
+        {
+            g_longer_dimension_in_disp = h;
+            g_shorter_dimension_in_disp = w;
+        }
     }
 #endif
 }
@@ -199,20 +218,23 @@ Layer::~Layer() {
     }
     mFlinger->deleteTextureAsync(mTextureName);
     mFrameTracker.logAndResetStats(mName);
+
 #ifdef OPEN_FBDC
-    if(mFbdc)
-    {
-        for (size_t i = 0; i < vFbdcLayers.size(); ++i) {
-            if(!strcmp(vFbdcLayers[i], mName.string()))
-            {
-                mFbdc = false;
-                g_fbdc_cnt--;
-                ALOGD_IF(DEBUG_FBDC,
-                        "%s: remove fbdc layer name=%s", __FUNCTION__, vFbdcLayers[i]);
-                vFbdcLayers.removeAt(i);
-            }
-        }
-    }
+   if ( mFbdc )
+   {
+       for ( size_t i = 0; i < vFbdcLayers.size(); ++i )
+       {
+           if( 0 == strcmp(vFbdcLayers[i], mName.string() ) )
+           {
+               mFbdc = false;
+               ALOGD_IF(DEBUG_FBDC,
+                       "%s: remove fbdc layer name=%s", __FUNCTION__, vFbdcLayers[i].string() );
+               vFbdcLayers.removeAt(i);
+
+               break;
+           }
+       }
+   }
 #endif
 }
 
@@ -314,27 +336,24 @@ const String8& Layer::getName() const {
     return mName;
 }
 
+/*---------------------------------------------------------------------------*/
+
 #ifdef OPEN_FBDC
 /**
  * remove all visible_layers from 'vFbdcLayers'.
  */
-void Layer::removeDisplayFbdcLayer() {
-#if 0
-    for (size_t i = 0; i < vFbdcLayers.size(); ++i)
-    {
-        ALOGD("%s: fbdc name[%d]=%s",__FUNCTION__,i,vFbdcLayers[i]);
-    }
-#endif
+void Layer::removeVisibleFbdcLayers() {
+    I("here.")
 
     for (size_t i = 0; i < vFbdcLayers.size(); ++i) {
-        if(mFlinger->hasLayerFromLayerSortedByZ(vFbdcLayers[i]))
+        // if(mFlinger->hasLayerFromLayerSortedByZ(vFbdcLayers[i]))
+        if ( mFlinger->hasLayerFromLayerSortedByZ(vFbdcLayers[i].string() ) )
         {
-            g_fbdc_cnt--;
             ALOGD_IF(DEBUG_FBDC,
-                    "%s: name=%s",__FUNCTION__,vFbdcLayers[i]);
+                    "%s: name=%s",__FUNCTION__,vFbdcLayers[i].string() );
             vFbdcLayers.removeAt(i);
 
-            removeDisplayFbdcLayer(); // recurssion, because size of 'vFbdcLayers' changed.
+            removeVisibleFbdcLayers(); // recurssion, because size of 'vFbdcLayers' changed.
         }
     }
 }
@@ -342,7 +361,7 @@ void Layer::removeDisplayFbdcLayer() {
 /**
  * return whether 'pcLayer' name of a unvisible_fbdc_layer?
  */
-bool Layer::hasLayerInFbdcLayers(const char* pcLayer) {
+bool Layer::isUnvisibleFbdcLayer(const char* pcLayer) {
     if(!pcLayer)
     {
         ALOGE("%s:layer is null",pcLayer);
@@ -350,13 +369,200 @@ bool Layer::hasLayerInFbdcLayers(const char* pcLayer) {
     }
 
     for (size_t i = 0; i < vFbdcLayers.size(); ++i) {
-        if(!strcmp(vFbdcLayers[i],pcLayer))
+        if(!strcmp(vFbdcLayers[i].string(), pcLayer))
             return true;
     }
 
     return false;
 }
+
+/**
+ * 当前 layer (包括这里传入的 w, h, usage 配置), 在当前 context 下, 是否可以使用 FBDC 格式的 buffer.
+ */
+bool Layer::wouldUseFbdc(uint32_t w, uint32_t h, uint32_t usage)
+{
+    char propValue[PROPERTY_VALUE_MAX];
+    property_get("debug.sf.no_fbdc_layer", propValue, "0");
+
+    if ( 1 == atoi(propValue) )
+    {
+        // D("w : %u, h : %u, usage : 0x%x", w, h, usage);
+        D("no fbdc_sf_client_layer, to return false.");
+        return false;
+    }
+
+    /*-------------------------------------------------------*/
+
+    size_t num = vFbdcLayers.size(); // numof_unvisible_fbdc_layers
+    uint32_t l = 0; // longer_dimension_in_buffer, 'w', 'h' 中较长一方的大小.
+    uint32_t s = 0;
+
+
+    if ( isInBlackListOfFbdc() ) {
+        LAYER_D("this layer is in the black_list_of_fbdc.");
+        return false;
+    }
+
+#ifdef USE_AFBC_LAYER
+    if ( !couldBeAfbcLayerByFormatAndUsage(mFormat, usage) )
+    {
+        LAYER_D("could not be afbc_layer for format or usage, fmt : 0x%x, usage : 0x%x.", mFormat, usage);
+        return false;
+    }
 #endif
+
+    if ( num >= MAX_FBDC_LAYER )
+    {
+        LAYER_D("too many fbdc_layers : %zu, max : %d", num, MAX_FBDC_LAYER);
+        dumpNameOfUnVisibleFbdcLayers();
+        return false;
+    }
+
+    if ( mFlinger->hasLayerFromLayerSortedByZ(mName.string() ) )
+    {
+        LAYER_D("this is a visible_layer.");
+        return false;
+    }
+
+    if ( isUnvisibleFbdcLayer(mName.string() ) )
+    {
+        LAYER_D("already in unvisible_fbdc_layer_list.");
+        return false;
+    }
+
+    /*-------------------------------------------------------*/
+
+    if ( w >= h )
+    {
+        l = w;
+        s = h;
+    }
+    else
+    {
+        l = h;
+        s = w;
+    }
+    // .trick : 若系统的 orientation 有变化, setSize() 传入的 w, h 的相对关系 和 display_device 就不同了.
+    //          所以这里将比较 buffer 和 display 各自较长的一侧进行比较, 之后比较 较短一侧.
+
+#ifndef USE_AFBC_LAYER  // for non_afbc_fbdc
+    if ( 0 == num )
+    {
+        if ( !(l >= 0.8 * g_longer_dimension_in_disp) )
+        {
+            LAYER_D("longer_dimension not enouth, l : %d, g_l : %d.", l,  g_longer_dimension_in_disp);
+            return false;
+        }
+
+        if ( !(s >= 0.8 * g_shorter_dimension_in_disp) )
+        {
+            LAYER_D("shorter_dimension not enouth, s : %d, g_s : %d.", s,  g_shorter_dimension_in_disp);
+            return false;
+        }
+    }
+    else if ( 1 == num )
+    {
+        if ( !(l >= g_longer_dimension_in_disp) )
+        {
+            LAYER_D("longer_dimension not enouth, l : %d, g_l : %d.", l,  g_longer_dimension_in_disp);
+            return false;
+        }
+
+        if ( !(s >= g_shorter_dimension_in_disp) )
+        {
+            LAYER_D("shorter_dimension not enouth, s : %d, g_s : %d.", s,  g_shorter_dimension_in_disp);
+            return false;
+        }
+    }
+    else
+    {
+        return false;
+    }
+
+    return true;
+#else   // for afbc
+    // 3399_fb_dev 对 afbc_layer 的 area_par 有诸多限制,
+    // 参见 rk_hwcomposer.cpp 中的 restrictions_for_afbc_area_par_from_vop.
+    // 所以, 这里仅对宽高和 display 一致的 layer 尝试使用 afbc.
+    if ( g_longer_dimension_in_disp == l && g_shorter_dimension_in_disp == s )
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+#endif
+}
+
+void Layer::dumpNameOfUnVisibleFbdcLayers()
+{
+    size_t num = vFbdcLayers.size();
+
+    LOGD("%zu unvisible_fbdc_layer(s) : ", num);
+
+    for ( size_t i = 0; i < num; ++i )
+    {
+        LOGD("\t%s", vFbdcLayers[i].string() );
+    }
+}
+
+/**
+ * 当前 layer 是否在 "禁止" 使用 fbdc 的 black_list 中.
+ */
+bool Layer::isInBlackListOfFbdc()
+{
+    if ( 0 == strcmp(mName.string(), "KeyguardScrim_Force_To_Dual")
+        || 0 == strcmp(mName.string(), "ScreenshotSurface")
+        || 0 == strcmp(mName.string(), "ColorFade")
+        || 0 == strcmp(mName.string(), "InputMethod")
+#if EXCLUDE_DIM
+        || 0 == strcmp(mName.string(), "DimLayer")
+#endif
+        )
+    {
+        return true;
+    }
+
+    if ( strstr(mName.string(), "Starting") == mName.string()
+        || strstr(mName.string(), "StatusBar") == mName.string()
+        || strstr(mName.string(), "NavigationBar") == mName.string()
+        )
+    {
+        return true;
+    }
+
+    return false;
+}
+#endif // #ifdef OPEN_FBDC
+
+#ifdef USE_AFBC_LAYER
+/**
+ * 有着指定 format 和 usage 的 layer, 是否可以是 afbc_layer (使用 buffer_in_afbc_format).
+ */
+bool Layer::couldBeAfbcLayerByFormatAndUsage(PixelFormat format, uint32_t usage)
+{
+    /* 若 将被 CPU 访问, 则... */
+    if( (usage & (GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK)) != 0 )
+    {
+        D("uncompatible usage : 0x%x", usage);
+        return false;
+    }
+
+    if (HAL_PIXEL_FORMAT_RGBA_8888 != format
+        && HAL_PIXEL_FORMAT_RGBX_8888 != format
+        && HAL_PIXEL_FORMAT_RGB_565 != format
+        )
+    {
+        D("unsupported format : 0x%x", format);
+        return false;
+    }
+
+    return true;
+}
+#endif
+
+/*---------------------------------------------------------------------------*/
 
 status_t Layer::setBuffers( uint32_t w, uint32_t h,
                             PixelFormat format, uint32_t flags)
@@ -383,35 +589,24 @@ status_t Layer::setBuffers( uint32_t w, uint32_t h,
 
 #ifdef OPEN_FBDC
     ALOGD_IF(DEBUG_FBDC,
-            "%s:layer name=%s,w=%d,h=%d", __FUNCTION__, mName.string(), w, h);
+            "%s:layer name=%s,w=%d,h=%d, format=0x%x", __FUNCTION__, mName.string(), w, h, format);
 
-    removeDisplayFbdcLayer();
+    /* 更新 vector_of_names_of_unvisible_fbdc_layers. */
+    removeVisibleFbdcLayers(); // 'this' 被创建之后, setBuffer() 总会被调用一次.
 
-    if(
-#if EXCLUDE_DIM
-    strcmp(mName.string(),"DimLayer") &&
-#endif
-        g_fbdc_cnt < MAX_FBDC_LAYER // could have more fbdc_layer.
-        && !mFlinger->hasLayerFromLayerSortedByZ(mName.string()) // current layer is not a visible_layers.
-        && !hasLayerInFbdcLayers(mName.string())) // it is not in 'vFbdcLayers'.
+    if ( wouldUseFbdc(w, h, usage) )
     {
-        if(/*strstr(mName.string(),"com.android.launcher3/com.android.launcher3.Launcher") ||*/
-            ((g_fbdc_cnt==0)
-                && (w >= 0.8 * g_hw_w)
-                && (h >= 0.8 * g_hw_h))
-            || ((g_fbdc_cnt==1)
-                && (w >= g_hw_w) && (h >= g_hw_h)))
-        {
-            usage |= 0x88;
-            g_fbdc_cnt++;
-            mFbdc = true;
-            vFbdcLayers.push_back(mName.string());
-            ALOGD_IF(DEBUG_FBDC,
-                    "%s:g_fbdc_cnt=%d,layer=%s [%d,%d] set to fbdc", __FUNCTION__,
-                    g_fbdc_cnt,mName.string(), w, h);
-        }
+        usage |=  0x04000000;
+        mFbdc = true;
+
+        vFbdcLayers.push_back(mName);
+
+        ALOGD_IF(DEBUG_FBDC,
+                "%s:num_of_ufl=%zu,layer=%s [%d,%d] set to fbdc", __FUNCTION__,
+                    vFbdcLayers.size(), mName.string(), w, h);
     }
 #endif
+
     mSurfaceFlingerConsumer->setConsumerUsageBits(usage);
 
     return NO_ERROR;
@@ -823,6 +1018,8 @@ void Layer::setPerFrameData(const sp<const DisplayDevice>& hw,
 #else
 	layer.setAlreadyStereo(mSurfaceFlingerConsumer->getAlreadyStereo());
 #endif
+
+    layer.setUseFbdc(mFbdc);
 }
 
 void Layer::setAcquireFence(const sp<const DisplayDevice>& /* hw */,
@@ -1506,7 +1703,10 @@ bool Layer::setLayer(uint32_t z) {
     setTransactionFlags(eTransactionNeeded);
     return true;
 }
+
 bool Layer::setSize(uint32_t w, uint32_t h) {
+    LAYER_D("enter. w : %d, h : %d, mCurrentTransform : 0x%x, mFormat : 0x%x", w, h, mCurrentTransform, mFormat);
+
     if (mCurrentState.requested.w == w && mCurrentState.requested.h == h)
         return false;
     mCurrentState.requested.w = w;
@@ -1516,28 +1716,16 @@ bool Layer::setSize(uint32_t w, uint32_t h) {
 #ifdef OPEN_FBDC
     uint32_t usage = getEffectiveUsage(0);
 
-    if(
-#if EXCLUDE_DIM
-    strcmp(mName.string(),"DimLayer") &&
-#endif
-        g_fbdc_cnt < MAX_FBDC_LAYER 
-        && !mFlinger->hasLayerFromLayerSortedByZ(mName.string()) 
-        && !hasLayerInFbdcLayers(mName.string()))
+    if ( wouldUseFbdc(w, h, usage) )
     {
-        if(((g_fbdc_cnt==0) 
-                && (w >= 0.8 * g_hw_w) 
-                && (h >= 0.8 * g_hw_h)) 
-            || ((g_fbdc_cnt==1) 
-                && (w >= g_hw_w) 
-                && (h >= g_hw_h)))
-        {
-            usage |= 0x88;
-            g_fbdc_cnt++;
-            mFbdc = true;
-            vFbdcLayers.push_back(mName.string());
-            ALOGD_IF(DEBUG_FBDC,
-                    "%s:g_fbdc_cnt=%d,layer=%s [%d,%d] set to fbdc",__FUNCTION__,g_fbdc_cnt,mName.string(),w,h);
-        }
+        usage |=  0x04000000;
+        mFbdc = true;
+
+        vFbdcLayers.push_back(mName);
+
+        ALOGD_IF(DEBUG_FBDC,
+                "%s:num_of_ufl=%zu,layer=%s [%d,%d] set to fbdc", __FUNCTION__,
+                    vFbdcLayers.size(), mName.string(), w, h);
     }
 
     mSurfaceFlingerConsumer->setConsumerUsageBits(usage);
@@ -1545,6 +1733,7 @@ bool Layer::setSize(uint32_t w, uint32_t h) {
 
     return true;
 }
+
 bool Layer::setAlpha(uint8_t alpha) {
     if (mCurrentState.alpha == alpha)
         return false;
@@ -1945,34 +2134,6 @@ uint32_t Layer::getEffectiveUsage(uint32_t usage) const
         usage |= GraphicBuffer::USAGE_CURSOR;
     }
     usage |= GraphicBuffer::USAGE_HW_COMPOSER;
-
-
-// #ifdef USE_AFBC_LAYER
-#if 0
-#define MAGIC_USAGE_TO_USE_AFBC_LAYER     (0x88)
-#if 0
-    char propValue[PROPERTY_VALUE_MAX];
-    property_get("debug.use.afbc", propValue, "0");
-    if ( 1 == atoi(propValue) )
-#endif
-    {
-        const char* NAME_OF_LAYER_TO_USE_AFBC = "SurfaceView";
-        
-        if ( 
-            0 == strcmp(mName.string(), NAME_OF_LAYER_TO_USE_AFBC ) 
-            || 0 == strcmp(mName.string(), "com.vectorunit.redcmgeplaycn/com.vectorunit.redcmgeplaycn.Red")
-            || 0 == strcmp(mName.string(), "Benchmark")
-            || 0 == strcmp(mName.string(), "com.android.settings/com.android.settings.Settings")
-            /*
-            || 0 == strcmp(mName.string(), "com.glbenchmark.glbenchmark27/net.kishonti.benchui.initialization.InitActivity") 
-            */
-        )
-        {
-            usage |= MAGIC_USAGE_TO_USE_AFBC_LAYER;
-            W("use_afbc_layer: force to set usage of layer '%s' to '0x%x'.", mName.string(), usage);
-        }
-    }
-#endif
 
     return usage;
 }

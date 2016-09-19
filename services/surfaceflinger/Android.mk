@@ -141,6 +141,7 @@ LOCAL_CFLAGS += -DENABLE_WFD_SKIP_FRAME
 endif
 
 ifeq ($(strip $(BOARD_USE_AFBC_LAYER)),true)
+# 使能 afbc_layer 一定使能 fbdc, 反之未必.
 LOCAL_CFLAGS += -DUSE_AFBC_LAYER
 LOCAL_CFLAGS += -DOPEN_FBDC
 endif
