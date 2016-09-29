@@ -837,10 +837,12 @@ void Layer::onDraw(const sp<const DisplayDevice>& hw, const Region& clip,
     }
 
     bool blackOutLayer = isProtected() || (isSecure() && !hw->isSecure());
+    bool forceBlackOutLayer = mActiveBuffer->getPixelFormat()
+                                            == HAL_PIXEL_FORMAT_YCrCb_NV12_10;
 
     RenderEngine& engine(mFlinger->getRenderEngine());
 
-    if (!blackOutLayer) {
+    if (!blackOutLayer || forceBlackOutLayer) {
         // TODO: we could be more subtle with isFixedSize()
         const bool useFiltering = getFiltering() || needsFiltering(hw) || isFixedSize();
 
