@@ -429,7 +429,9 @@ void InputReader::removeDeviceLocked(nsecs_t when, int32_t deviceId) {
     if (device->getClasses() & INPUT_DEVICE_CLASS_EXTERNAL_STYLUS) {
         notifyExternalStylusPresenceChanged();
     }
-
+    if(device->getSources() & AINPUT_SOURCE_MOUSE){
+        device->fadePointer();
+    }
     device->reset(when);
     delete device;
 }
