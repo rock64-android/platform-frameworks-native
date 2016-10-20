@@ -596,7 +596,7 @@ status_t Layer::setBuffers( uint32_t w, uint32_t h,
 
     if ( wouldUseFbdc(w, h, usage) )
     {
-        usage |=  0x04000000;
+        usage |= GRALLOC_USAGE_TO_USE_FBDC_FMT;
         mFbdc = true;
 
         vFbdcLayers.push_back(mName);
@@ -1060,7 +1060,7 @@ bool Layer::isFBRLayer(){
 
     int64_t usage = mActiveBuffer->getUsage();
 
-    if (usage & 0x08000000)
+    if (usage & GRALLOC_USAGE_TO_USE_SINGLE_BUFFER)
         return true;
     else
         return false;
@@ -1718,7 +1718,7 @@ bool Layer::setSize(uint32_t w, uint32_t h) {
 
     if ( wouldUseFbdc(w, h, usage) )
     {
-        usage |=  0x04000000;
+        usage |= GRALLOC_USAGE_TO_USE_FBDC_FMT;
         mFbdc = true;
 
         vFbdcLayers.push_back(mName);

@@ -335,14 +335,14 @@ status_t BufferQueueProducer::dequeueBuffer(int *outSlot,
         mSlots[found].mBufferState = BufferSlot::DEQUEUED;
 
         const sp<GraphicBuffer>& buffer(mSlots[found].mGraphicBuffer);
-//        if(usage & 0x08000000)
+//        if(usage & GRALLOC_USAGE_TO_USE_SINGLE_BUFFER)
 //        {
 //            test_cnt ++;
 //            if(test_cnt > 1000 && test_cnt <1005 )
 //            {
 //                if(buffer != NULL)
 //                {
-//                    buffer->usage = 0x08000000 + test_cnt/100;
+//                    buffer->usage = GRALLOC_USAGE_TO_USE_SINGLE_BUFFER + test_cnt/100;
 //                    BQ_LOGE("test_cnt usage=%x,test_cnt=%d",static_cast<uint32_t>(buffer->usage),test_cnt);
 //                }
 //            }
@@ -358,7 +358,7 @@ status_t BufferQueueProducer::dequeueBuffer(int *outSlot,
         if ((buffer == NULL) ||
                 buffer->needsReallocation(width, height, format, usage))
         {
-            if ( usage & 0x08000000 )
+            if ( usage & GRALLOC_USAGE_TO_USE_SINGLE_BUFFER )
             {   
                //int32_t fmt =  (int32_t)format;
                if( (buffer != NULL) && (
@@ -436,7 +436,7 @@ status_t BufferQueueProducer::dequeueBuffer(int *outSlot,
     if (returnFlags & BUFFER_NEEDS_REALLOCATION) {
         status_t error;
       //  BQ_LOGD("dequeueBuffer: allocating a new buffer for slot %d,usage=%x,maxBufferCount=%d", *outSlot,usage,maxBufferCount);
-        if(!bufferchanged && (usage & 0x08000000))
+        if(!bufferchanged && (usage & GRALLOC_USAGE_TO_USE_SINGLE_BUFFER))
         //if(0)
         {
             if(FbrgraphicBuffer == NULL)

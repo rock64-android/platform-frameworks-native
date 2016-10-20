@@ -772,14 +772,14 @@ int Surface::setUsage(uint32_t reqUsage)
     ALOGV("Surface::setUsage");
 
     Mutex::Autolock lock(mMutex);
-    if(reqUsage == 0x08000000)
+    if(reqUsage == GRALLOC_USAGE_TO_USE_SINGLE_BUFFER)
     {
-        mReqUsage |= 0x08000000;
+        mReqUsage |= GRALLOC_USAGE_TO_USE_SINGLE_BUFFER;
     }
-    else if(mReqUsage & 0x08000000)
+    else if(mReqUsage & GRALLOC_USAGE_TO_USE_SINGLE_BUFFER)
     {
         mReqUsage = reqUsage;
-        mReqUsage |= 0x08000000;
+        mReqUsage |= GRALLOC_USAGE_TO_USE_SINGLE_BUFFER;
     }
     else
     {    
@@ -787,7 +787,7 @@ int Surface::setUsage(uint32_t reqUsage)
     }  
 #ifdef USE_AFBC_LAYER
 #define MAGIC_USAGE_TO_USE_AFBC_LAYER     (0x88)
-    if(mReqUsage & 0x08000000)
+    if(mReqUsage & GRALLOC_USAGE_TO_USE_SINGLE_BUFFER)
     {
         mReqUsage |= MAGIC_USAGE_TO_USE_AFBC_LAYER;
         ALOGD("rk_debug @FBR force enable AFBC");
