@@ -753,7 +753,10 @@ void Layer::setAlreadyStereo(HWComposer::HWCLayerInterface& layer,int flag) {
 }
 
 int Layer::getStereoModeToDraw()const{
-    return mStereoMode;
+    if(mStereoMode & 0x8000)
+        return 0;
+    else
+        return mStereoMode;
 }
 #endif
 
@@ -1013,7 +1016,7 @@ void Layer::clearWithOpenGL(const sp<const DisplayDevice>& hw,
     engine.setupFillWithColor(red, green, blue, alpha);
 #ifdef ROCKCHIP_VIRTUAL_REALITY
 	setStereoDrawVR(hw, engine, mMesh,
-        mSurfaceFlingerConsumer->getAlreadyStereo()/*getStereoModeToDraw()*/, displayStereo);
+        /*mSurfaceFlingerConsumer->getAlreadyStereo()*/getStereoModeToDraw(), displayStereo);
 #else
     setStereoDraw(hw, engine, mMesh,
         mSurfaceFlingerConsumer->getAlreadyStereo(), displayStereo);
@@ -1065,7 +1068,7 @@ void Layer::drawWithOpenGL(const sp<const DisplayDevice>& hw,
     engine.setupLayerBlending(mPremultipliedAlpha, isOpaque(s), s.alpha);
 #ifdef ROCKCHIP_VIRTUAL_REALITY
 	setStereoDrawVR(hw, engine, mMesh,
-        mSurfaceFlingerConsumer->getAlreadyStereo()/*getStereoModeToDraw()*/, displayStereo);
+        /*mSurfaceFlingerConsumer->getAlreadyStereo()*/getStereoModeToDraw(), displayStereo);
 #else
     setStereoDraw(hw, engine, mMesh,
         mSurfaceFlingerConsumer->getAlreadyStereo(), displayStereo);

@@ -1357,7 +1357,7 @@ void SurfaceFlinger::setUpHWComposer() {
                 #endif
                     layer->setPerFrameData(hw, *cur);
                 #ifdef ROCKCHIP_VIRTUAL_REALITY
-		    // vr : setAlreadyStereo
+                    // vr : setAlreadyStereo
                     int already3d = 0;
                     if(hw->getWidth() > hw->getHeight())
                         already3d = 1;
@@ -1368,7 +1368,6 @@ void SurfaceFlinger::setUpHWComposer() {
                     char value[PROPERTY_VALUE_MAX];
                     property_get("sys.vr.stereo", value, "0");
                     int enableStereo = atoi(value);    
-                    
                     if(hasFBRLayer){
                         if(strstr(layer->getName().string(),"_Force_To_Dual") != NULL){
                             layer->setAlreadyStereo(*cur, 0); // hwc do stereo
@@ -1379,7 +1378,7 @@ void SurfaceFlinger::setUpHWComposer() {
                             if(enableStereo==1)
                                 layer->setAlreadyStereo(*cur, 0); // hwc do stereo
                             else if(enableStereo==0)
-                                layer->setAlreadyStereo(*cur, already3d); // hwc do stereo
+                                layer->setAlreadyStereo(*cur, already3d); // hwc not do stereo
                         }
                     }else{
                         if(enableStereo==1){
@@ -1395,7 +1394,7 @@ void SurfaceFlinger::setUpHWComposer() {
                                 }else{
                                     layer->setAlreadyStereo(*cur, already3d); // hwc not do stereo
                                 }
-                            }   
+                            }
                             
                             if(!hasForceDualUI && hasNoForceDualUI){
                                 layer->setAlreadyStereo(*cur, 0); // hwc not do stereo
