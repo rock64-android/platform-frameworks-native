@@ -57,7 +57,11 @@
 #ifdef OPEN_FBDC
 #define DEBUG_FBDC          (1)
 /** max num of unvisible_fbdc_layers. */
+#ifdef ROCKCHIP_VIRTUAL_REALITY
+#define MAX_FBDC_LAYER      (8)
+#else
 #define MAX_FBDC_LAYER      (2)
+#endif
 /** 若定义 则 "不对" dim_layer . */
 #define EXCLUDE_DIM         (1)
 #endif
@@ -343,8 +347,6 @@ const String8& Layer::getName() const {
  * remove all visible_layers from 'vFbdcLayers'.
  */
 void Layer::removeVisibleFbdcLayers() {
-    I("here.")
-
     for (size_t i = 0; i < vFbdcLayers.size(); ++i) {
         // if(mFlinger->hasLayerFromLayerSortedByZ(vFbdcLayers[i]))
         if ( mFlinger->hasLayerFromLayerSortedByZ(vFbdcLayers[i].string() ) )
@@ -399,34 +401,39 @@ bool Layer::wouldUseFbdc(uint32_t w, uint32_t h, uint32_t usage)
 
 
     if ( isInBlackListOfFbdc() ) {
-        LAYER_D("this layer is in the black_list_of_fbdc.");
+        LAYER_I("this layer is in the black_list_of_fbdc.");
         return false;
     }
 
 #ifdef USE_AFBC_LAYER
     if ( !couldBeAfbcLayerByFormatAndUsage(mFormat, usage) )
     {
-        LAYER_D("could not be afbc_layer for format or usage, fmt : 0x%x, usage : 0x%x.", mFormat, usage);
+        LAYER_I("could not be afbc_layer for format or usage, fmt : 0x%x, usage : 0x%x.", mFormat, usage);
         return false;
     }
 #endif
 
     if ( num >= MAX_FBDC_LAYER )
     {
-        LAYER_D("too many fbdc_layers : %zu, max : %d", num, MAX_FBDC_LAYER);
+        LAYER_I("too many fbdc_layers : %zu, max : %d", num, MAX_FBDC_LAYER);
         dumpNameOfUnVisibleFbdcLayers();
         return false;
     }
 
+
+#ifndef ROCKCHIP_VIRTUAL_REALITY
     if ( mFlinger->hasLayerFromLayerSortedByZ(mName.string() ) )
     {
-        LAYER_D("this is a visible_layer.");
+        LAYER_I("this is a visible_layer.");
         return false;
     }
+#else
+    // vr_device 中的大量 layer 有相同的名称 "SurfaceView", 不适用上述规则.
+#endif
 
     if ( isUnvisibleFbdcLayer(mName.string() ) )
     {
-        LAYER_D("already in unvisible_fbdc_layer_list.");
+        LAYER_I("already in unvisible_fbdc_layer_list.");
         return false;
     }
 
@@ -450,13 +457,13 @@ bool Layer::wouldUseFbdc(uint32_t w, uint32_t h, uint32_t usage)
     {
         if ( !(l >= 0.8 * g_longer_dimension_in_disp) )
         {
-            LAYER_D("longer_dimension not enouth, l : %d, g_l : %d.", l,  g_longer_dimension_in_disp);
+            LAYER_I("longer_dimension not enouth, l : %d, g_l : %d.", l,  g_longer_dimension_in_disp);
             return false;
         }
 
         if ( !(s >= 0.8 * g_shorter_dimension_in_disp) )
         {
-            LAYER_D("shorter_dimension not enouth, s : %d, g_s : %d.", s,  g_shorter_dimension_in_disp);
+            LAYER_I("shorter_dimension not enouth, s : %d, g_s : %d.", s,  g_shorter_dimension_in_disp);
             return false;
         }
     }
@@ -464,13 +471,13 @@ bool Layer::wouldUseFbdc(uint32_t w, uint32_t h, uint32_t usage)
     {
         if ( !(l >= g_longer_dimension_in_disp) )
         {
-            LAYER_D("longer_dimension not enouth, l : %d, g_l : %d.", l,  g_longer_dimension_in_disp);
+            LAYER_I("longer_dimension not enouth, l : %d, g_l : %d.", l,  g_longer_dimension_in_disp);
             return false;
         }
 
         if ( !(s >= g_shorter_dimension_in_disp) )
         {
-            LAYER_D("shorter_dimension not enouth, s : %d, g_s : %d.", s,  g_shorter_dimension_in_disp);
+            LAYER_I("shorter_dimension not enouth, s : %d, g_s : %d.", s,  g_shorter_dimension_in_disp);
             return false;
         }
     }

@@ -49,6 +49,7 @@
 #include "RenderEngine/Texture.h"
 
 #define LAYER_D(fmt, args...)   D("[%s] : " fmt, mName.string(), ## args)
+#define LAYER_I(fmt, args...)   I("[%s] : " fmt, mName.string(), ## args)
 
 /*---------------------------------------------------------------------------*/
 
