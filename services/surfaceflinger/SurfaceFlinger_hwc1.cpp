@@ -1329,7 +1329,7 @@ void SurfaceFlinger::setUpHWComposer() {
                     const Vector< sp<Layer> >& currentLayers(
                         hw->getVisibleLayersSortedByZ());
                     const size_t count = currentLayers.size();
-                    if (hwc.createWorkList(id, count) == NO_ERROR) {
+                    if (hwc.createWorkList(id, count, mDisplays[dpy]->getWidth(), mDisplays[dpy]->getHeight()) == NO_ERROR) {
                         HWComposer::LayerListIterator cur = hwc.begin(id);
                         const HWComposer::LayerListIterator end = hwc.end(id);
                         for (size_t i=0 ; cur!=end && i<count ; ++i, ++cur) {

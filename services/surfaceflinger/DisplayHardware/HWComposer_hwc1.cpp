@@ -618,7 +618,7 @@ void HWComposer::eventControl(int disp, int event, int enabled) {
     }
 }
 
-status_t HWComposer::createWorkList(int32_t id, size_t numLayers) {
+status_t HWComposer::createWorkList(int32_t id, size_t numLayers, int width, int height) {
     if (uint32_t(id)>31 || !mAllocatedDisplayIDs.hasBit(id)) {
         return BAD_INDEX;
     }
@@ -639,26 +639,24 @@ status_t HWComposer::createWorkList(int32_t id, size_t numLayers) {
         if (hwcHasApiVersion(mHwc, HWC_DEVICE_API_VERSION_1_1)) {
             disp.framebufferTarget = &disp.list->hwLayers[numLayers - 1];
             memset(disp.framebufferTarget, 0, sizeof(hwc_layer_1_t));
+#if !RK_USE_DRM
+            const hwc_rect_t r = { 0, 0, (int) width, (int) height };
+#else
             const DisplayConfig& currentConfig =
                     disp.configs[disp.currentConfig];
             const hwc_rect_t r = { 0, 0,
                     (int) currentConfig.width, (int) currentConfig.height };
+#endif
             disp.framebufferTarget->compositionType = HWC_FRAMEBUFFER_TARGET;
             disp.framebufferTarget->hints = 0;
             disp.framebufferTarget->flags = 0;
             disp.framebufferTarget->handle = disp.fbTargetHandle;
             disp.framebufferTarget->transform = 0;
             disp.framebufferTarget->blending = HWC_BLENDING_PREMULT;
-            if (hwcHasApiVersion(mHwc, HWC_DEVICE_API_VERSION_1_3)) {
-                disp.framebufferTarget->sourceCropf.left = 0;
-                disp.framebufferTarget->sourceCropf.top = 0;
-                disp.framebufferTarget->sourceCropf.right =
-                        currentConfig.width;
-                disp.framebufferTarget->sourceCropf.bottom =
-                        currentConfig.height;
-            } else {
-                disp.framebufferTarget->sourceCrop = r;
-            }
+            disp.framebufferTarget->sourceCropf.left = 0;
+            disp.framebufferTarget->sourceCropf.top = 0;
+            disp.framebufferTarget->sourceCropf.right = width;
+            disp.framebufferTarget->sourceCropf.bottom = height;
             disp.framebufferTarget->displayFrame = r;
             disp.framebufferTarget->visibleRegionScreen.numRects = 1;
             disp.framebufferTarget->visibleRegionScreen.rects =
@@ -881,7 +879,7 @@ status_t HWComposer::setActiveConfig(int disp, int mode) {
     LOG_FATAL_IF(disp >= VIRTUAL_DISPLAY_ID_BASE);
     DisplayData& dd(mDisplayData[disp]);
     dd.currentConfig = mode;
-    if (mHwc && hwcHasApiVersion(mHwc, HWC_DEVICE_API_VERSION_1_4)) {
+    if (mHwc && hwcHasApiVersion(mHwc, HWC_DEVICE_API_VERSION_1_3)) {
         return (status_t)mHwc->setActiveConfig(mHwc, disp, mode);
     } else {
         LOG_FATAL_IF(mode != 0);

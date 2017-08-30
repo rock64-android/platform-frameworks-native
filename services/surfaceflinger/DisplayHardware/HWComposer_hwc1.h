@@ -118,7 +118,7 @@ public:
     void disconnectDisplay(int disp);
 
     // create a work list for numLayers layer. sets HWC_GEOMETRY_CHANGED.
-    status_t createWorkList(int32_t id, size_t numLayers);
+    status_t createWorkList(int32_t id, size_t numLayers, int width, int height);
 
     bool supportsFramebufferTarget() const;
 
